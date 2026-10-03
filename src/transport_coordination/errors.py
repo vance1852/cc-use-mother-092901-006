@@ -1,11 +1,17 @@
 """领域服务使用的业务异常。"""
 
+from __future__ import annotations
+
 
 class DomainError(Exception):
     """所有可预期业务异常的基类。"""
 
     code = "domain_error"
     status = 400
+
+    def __init__(self, message: str = "", *, extra: dict | None = None) -> None:
+        super().__init__(message)
+        self.extra = dict(extra or {})
 
 
 class ValidationError(DomainError):
