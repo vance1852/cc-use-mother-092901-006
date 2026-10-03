@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .errors import DomainError, ValidationError
+from .scheduling import SchedulingService
 from .service import DomainService
 from .storage import Database
 
@@ -21,6 +22,7 @@ def route(service: DomainService, method: str, path: str, body: dict[str, Any] |
     body = body or {}
     parsed = urlparse(path)
     actor_id = headers.get("X-Actor-Id", "")
+    scheduling = SchedulingService(service.database, service.clock)
     try:
         if method == "GET" and parsed.path == "/health":
             valid, count = service.verify_audit()
@@ -48,6 +50,74 @@ def route(service: DomainService, method: str, path: str, body: dict[str, Any] |
             query = parse_qs(parsed.query)
             after = int(query.get("after_sequence", ["0"])[0])
             return 200, {"items": service.audit_events(after)}
+
+        # ------------------------------------------------------------ 统一日历资源
+        if method == "POST" and parsed.path == "/facilities":
+            result = scheduling.register_facility(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/corridors":
+            result = scheduling.register_corridor(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/crews":
+            result = scheduling.register_crew(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/materials":
+            result = scheduling.register_material(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/funds":
+            result = scheduling.register_fund(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+
+        # ------------------------------------------------------------ 窗口编排
+        if method == "POST" and parsed.path == "/renewal-windows":
+            result = scheduling.create_window(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/proposals":
+            result = scheduling.submit_proposal(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/proposals/sign":
+            result = scheduling.sign_proposal(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/proposals/confirm-lock":
+            result = scheduling.confirm_lock(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/delay":
+            result = scheduling.delay_phase(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/reschedule":
+            result = scheduling.reschedule_phase(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/emergency-repair":
+            result = scheduling.emergency_repair(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/start":
+            result = scheduling.start_phase(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/complete":
+            result = scheduling.complete_phase(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/phases/reject":
+            result = scheduling.reject_phase(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/leases/renew":
+            result = scheduling.renew_leases(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/windows/reopen":
+            result = scheduling.reopen(actor_id=actor_id, **body)
+            return 200 if result.get("replayed") else 201, result
+        if method == "POST" and parsed.path == "/recover":
+            return 200, scheduling.recover()
+
+        if method == "GET" and parsed.path.startswith("/windows/"):
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) == 2:
+                return 200, scheduling.get_window(parts[1])
+            if len(parts) == 3 and parts[2] == "timeline":
+                return 200, scheduling.timeline(parts[1])
+        if method == "GET" and parsed.path == "/calendar":
+            query = parse_qs(parsed.query)
+            return 200, scheduling.calendar(query.get("start", [None])[0],
+                                            query.get("end", [None])[0])
         return 404, {"error": "route_not_found", "message": "接口不存在"}
     except DomainError as exc:
         return exc.status, {"error": exc.code, "message": str(exc)}

@@ -33,3 +33,17 @@ class ConflictError(DomainError):
 
     code = "conflict"
     status = 409
+
+
+class ExpiredError(DomainError):
+    """限时草案或租约已经超过有效期限。"""
+
+    code = "expired"
+    status = 410
+
+
+class PreconditionFailed(DomainError):
+    """资源释放、通行恢复或阶段推进的前置条件尚未满足。"""
+
+    code = "precondition_failed"
+    status = 412
